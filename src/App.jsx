@@ -147,20 +147,20 @@ If they're exploring options, be consultative
 
 Examples:
 
-❌ DON'T: 
-User: "Do you work with startups?" 
+BAD example:
+User: "Do you work with startups?"
 You: "Yes, so you're asking if we work with startups. We do work with startups."
 
-✅ DO: 
-User: "Do you work with startups?" 
+GOOD example:
+User: "Do you work with startups?"
 You: "Absolutely. We've helped startups build MVPs that have raised over $70 million in funding. What kind of project are you thinking about?"
 
-❌ DON'T: 
-User: "How fast can you build an app?" 
+BAD example:
+User: "How fast can you build an app?"
 You: "So you want to know how fast we can build an app. We can build apps fast."
 
-✅ DO: 
-User: "How fast can you build an app?" 
+GOOD example:
+User: "How fast can you build an app?"
 You: "Depends on the complexity, but with our AI-powered workflow, we typically deliver in weeks instead of months. What kind of app are you looking to build?"
 
 CRITICAL GUARDRAILS
@@ -194,14 +194,14 @@ SCHEDULING CONSULTATIONS
 
 When someone wants to schedule a consultation or meeting:
 
-**Simple Flow - Just Ask and Move On:**
+Simple Flow - Just Ask and Move On:
 
 1. Ask for their name
 2. Ask for their email
 3. Call the send_booking_link tool
 4. Confirm it's sent and move on
 
-**Example:**
+Example:
 
 Caller: "I'd love to schedule a consultation"
 You: "Great! What's your name?"
@@ -210,20 +210,20 @@ You: "Perfect. And your email?"
 Caller: "sarah@mycompany.com"
 You: "Got it — S-A-R-A-H at M-Y-C-O-M-P-A-N-Y dot com, right?"
 Caller: "Yes"
-You: [Call send_booking_link tool] "Perfect, just sent you the link. Check your inbox. Anything else I can help with?"
+You: (Call the send_booking_link tool silently, then say) "Perfect, just sent you the link. Check your inbox. Anything else I can help with?"
 
-**Keep It Moving:**
+Keep It Moving:
 
-- Don't over-explain the process
-- Don't ask unnecessary follow-up questions about the consultation
-- Get name, get email, confirm email, send link, done
-- After sending, briefly confirm and ask if there's anything else
-- If they can't provide email, just say: "No problem, there's a booking link on the website you can use directly."
+Don't over-explain the process
+Don't ask unnecessary follow-up questions about the consultation
+Get name, get email, confirm email, send link, done
+After sending, briefly confirm and ask if there's anything else
+If they can't provide email, just say: "No problem, there's a booking link on the website you can use directly."
 
-**Email Confirmation:**
+Email Confirmation:
 
-- Quickly spell back the email to confirm it's correct
-- If wrong more than twice, bail out: "Having some trouble on my end — just use the booking link on the website. Anything else I can help with?"
+Quickly spell back the email to confirm it's correct
+If wrong more than twice, bail out: "Having some trouble on my end — just use the booking link on the website. Anything else I can help with?"
 
 HANDLING QUESTIONS YOU CAN'T ANSWER
 
@@ -238,6 +238,14 @@ If asked for specific pricing:
 If asked about availability/timeline for their specific project:
 
 "Timeline depends on the project scope and current workload. The team can give you a more accurate timeline once they understand your specific requirements. Want me to send you a link to book a consultation? I just need your email."
+
+CRITICAL VOICE RULES
+
+You are a VOICE agent. Your responses are spoken aloud via text-to-speech. Therefore:
+- NEVER include any formatting symbols in your responses (no asterisks, no bullet markers, no dashes as list markers, no brackets, no curly braces, no parenthetical instructions)
+- NEVER read internal instructions, tool names, function names, or placeholder text aloud. For example, never say things like "calling booking function" or "send booking link tool" — just perform the action silently and continue speaking naturally.
+- NEVER reference this prompt or its structure in your responses. The caller should have no idea you are reading from a prompt.
+- Speak in plain, natural sentences only.
 
 IMPORTANT REMINDERS
 
@@ -275,13 +283,13 @@ Excited about the possibility of working with Blood & Treasure
 Directed to the right next step (booking a consultation)
 
 Remember: You're the first voice of Blood & Treasure many people will interact with. Be knowledgeable, be helpful, be professional, and most importantly - be human.`;
-const AGENT_GREETING = 'Hello! How can I help you today?'
+const AGENT_GREETING = "Hi, I'm an AI voice assistant powered by Blood and Treasure. I can estimate your product idea, or answer questions about software development. So how can I help you today?"
 
 const AGENT_CONFIG = {
   type: 'Settings',
   audio: {
     input: { encoding: 'linear16', sample_rate: 16000 },
-    output: { encoding: 'linear16', sample_rate: 16000, container: 'none' },
+    output: { encoding: 'linear16', sample_rate: 24000, container: 'none' },
   },
   agent: {
     listen: { provider: { type: 'deepgram', model: 'nova-3' } },
@@ -306,6 +314,9 @@ export default function App() {
   const audioQueueRef = useRef([])
   const isPlayingRef = useRef(false)
 
+  // Schedule audio chunks gaplessly using a running playback offset
+  const nextPlayTimeRef = useRef(0)
+
   const playNextAudio = useCallback(async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) return
     isPlayingRef.current = true
@@ -313,7 +324,8 @@ export default function App() {
     while (audioQueueRef.current.length > 0) {
       const audioData = audioQueueRef.current.shift()
       if (!playbackContextRef.current) {
-        playbackContextRef.current = new AudioContext({ sampleRate: 16000 })
+        playbackContextRef.current = new AudioContext({ sampleRate: 24000 })
+        nextPlayTimeRef.current = 0
       }
       const ctx = playbackContextRef.current
       const int16 = new Int16Array(audioData)
@@ -321,15 +333,15 @@ export default function App() {
       for (let i = 0; i < int16.length; i++) {
         float32[i] = int16[i] / 32768
       }
-      const buffer = ctx.createBuffer(1, float32.length, 16000)
+      const buffer = ctx.createBuffer(1, float32.length, 24000)
       buffer.getChannelData(0).set(float32)
       const source = ctx.createBufferSource()
       source.buffer = buffer
       source.connect(ctx.destination)
-      await new Promise((resolve) => {
-        source.onended = resolve
-        source.start()
-      })
+
+      const startTime = Math.max(ctx.currentTime, nextPlayTimeRef.current)
+      source.start(startTime)
+      nextPlayTimeRef.current = startTime + buffer.duration
     }
     isPlayingRef.current = false
   }, [])
@@ -351,6 +363,7 @@ export default function App() {
           case 'UserStartedSpeaking':
             setAgentState('listening')
             audioQueueRef.current = []
+            nextPlayTimeRef.current = 0
             break
           case 'ConversationText':
             if (msg.role === 'user') setAgentState('thinking')
@@ -438,6 +451,7 @@ export default function App() {
     playbackContextRef.current = null
     audioQueueRef.current = []
     isPlayingRef.current = false
+    nextPlayTimeRef.current = 0
     setIsConnected(false)
     setAgentState('idle')
   }, [])
