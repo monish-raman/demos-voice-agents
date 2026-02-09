@@ -363,7 +363,12 @@ export default function App() {
           case 'UserStartedSpeaking':
             setAgentState('listening')
             audioQueueRef.current = []
+            isPlayingRef.current = false
             nextPlayTimeRef.current = 0
+            if (playbackContextRef.current) {
+              playbackContextRef.current.close()
+              playbackContextRef.current = null
+            }
             break
           case 'ConversationText':
             if (msg.role === 'user') setAgentState('thinking')
